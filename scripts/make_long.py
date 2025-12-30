@@ -1,6 +1,9 @@
 from moviepy.editor import *
 import json, uuid
 
+os.makedirs("long", exist_ok=True)
+
+
 with open("data/news.json") as f:
     news = json.load(f)
 
