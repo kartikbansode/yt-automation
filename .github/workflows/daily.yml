@@ -1,8 +1,11 @@
 name: Daily YouTube Automation
 
+permissions:
+  contents: write   # 👈 THIS IS THE KEY FIX
+
 on:
   schedule:
-    - cron: "0 6 * * *"   # Runs daily at 06:00 UTC
+    - cron: "0 6 * * *"
   workflow_dispatch:
 
 jobs:
@@ -15,6 +18,8 @@ jobs:
       # -------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: true
 
       # -------------------------
       # Python setup
@@ -96,7 +101,7 @@ jobs:
       - name: Commit generated files
         run: |
           git config --global user.name "yt-automation-bot"
-          git config --global user.email "bot@github.com"
+          git config --global user.email "yt-automation-bot@users.noreply.github.com"
           git add data shorts long
           git commit -m "Daily YouTube automation run" || echo "Nothing to commit"
-          git push
+          git push origin main
