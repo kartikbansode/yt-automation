@@ -9,6 +9,9 @@ from moviepy.editor import ImageClip, CompositeVideoClip, ColorClip
 # ------------------------
 # Setup
 # ------------------------
+WIDTH, HEIGHT = 1080, 1920
+DURATION = 30
+
 os.makedirs("shorts", exist_ok=True)
 
 if not os.path.exists("data/news.json"):
@@ -24,68 +27,64 @@ if not news:
 
 item = news[0]
 
-TITLE = item["title"]
-DESC = (item.get("description") or "")[:120]
+title = item.get("title", "").strip()
+desc = (item.get("description") or "").strip()[:140]
 
-TEXT = f"{TITLE}\n\n{DESC}"
+text_blocks = [title, "", desc]
 
 # ------------------------
-# Create text image (PIL)
+# Create PIL image
 # ------------------------
-WIDTH, HEIGHT = 1080, 1920
-IMG = Image.new("RGB", (WIDTH, HEIGHT), color=(0, 0, 0))
-DRAW = ImageDraw.Draw(IMG)
+img = Image.new("RGB", (WIDTH, HEIGHT), color=(0, 0, 0))
+draw = ImageDraw.Draw(img)
+font = ImageFont.load_default()
 
-# Default font (always exists on Linux)
-FONT = ImageFont.load_default()
-
-# Text box
 MARGIN_X = 80
-MARGIN_Y = 300
+START_Y = 300
+LINE_SPACING = 12
 MAX_WIDTH = WIDTH - (MARGIN_X * 2)
 
-def draw_multiline_text(draw, text, font, x, y, max_width, line_spacing=10):
+def wrap_line(draw, text, font, max_width):
     words = text.split(" ")
     lines = []
     current = ""
 
     for word in words:
-        test = current + word + " "
-        if draw.textlength(test, font=font) <= max_width:
-            current = test
+        test_line = f"{current}{word} "
+        w, _ = draw.textsize(test_line, font=font)
+        if w <= max_width:
+            current = test_line
         else:
-            lines.append(current)
-            current = word + " "
-    lines.append(current)
+            lines.append(current.rstrip())
+            current = f"{word} "
+    if current:
+        lines.append(current.rstrip())
 
-    for line in lines:
-        draw.text((x, y), line, font=font, fill="white")
-        y += font.size + line_spacing
+    return lines
 
-draw_multiline_text(
-    DRAW,
-    TEXT,
-    FONT,
-    MARGIN_X,
-    MARGIN_Y,
-    MAX_WIDTH
-)
+y = START_Y
 
+for block in text_blocks:
+    if not block:
+        y += font.size * 2
+        continue
+
+    wrapped = wrap_line(draw, block, font, MAX_WIDTH)
+    for line in wrapped:
+        draw.text((MARGIN_X, y), line, fill="white", font=font)
+        y += font.size + LINE_SPACING
+
+# ------------------------
 # Save text image
+# ------------------------
 img_path = f"/tmp/{uuid.uuid4()}.png"
-IMG.save(img_path)
+img.save(img_path)
 
 # ------------------------
 # Build video
 # ------------------------
-DURATION = 30
-
 bg = ColorClip((WIDTH, HEIGHT), color=(0, 0, 0), duration=DURATION)
-
-txt_clip = (
-    ImageClip(img_path)
-    .set_duration(DURATION)
-)
+txt_clip = ImageClip(img_path).set_duration(DURATION)
 
 final = CompositeVideoClip([bg, txt_clip])
 
