@@ -1,4 +1,6 @@
-moviepy
+moviepy==1.0.3
+imageio
+imageio-ffmpeg
 Pillow
 requests
 google-api-python-client
