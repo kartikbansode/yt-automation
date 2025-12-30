@@ -34,6 +34,12 @@ jobs:
       - name: Create Long Video
         run: python scripts/make_long.py
 
+      - name: Restore YouTube token
+        run: |
+          mkdir -p config
+          echo '${{ secrets.YT_TOKEN_JSON }}' > config/token.json
+
+
       - name: Upload Long Video to YouTube
         run: python scripts/upload_youtube.py long
 
