@@ -2,15 +2,15 @@ name: Daily YouTube Automation
 
 on:
   schedule:
-    - cron: "0 6 * * *"   # once per day (UTC)
+    - cron: "0 6 * * *"   # Daily at 06:00 UTC
   workflow_dispatch:
 
 jobs:
-  run:
+  yt-automation:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Python
@@ -21,42 +21,53 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y imagemagick ffmpeg
+          sudo apt-get install -y ffmpeg imagemagick
 
-      - name: Fix ImageMagick policy
+      - name: Fix ImageMagick security policy
         run: |
           sudo sed -i 's/<policy domain="path" rights="none" pattern="@\*"/>/<policy domain="path" rights="read|write" pattern="@*"/>/' /etc/ImageMagick-6/policy.xml || true
 
-
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
+          pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Restore YouTube OAuth token
+        run: |
+          mkdir -p config
+          echo '${{ secrets.YT_TOKEN_JSON }}' > config/token.json
+
       - name: Fetch news
+        env:
+          NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
         run: python scripts/fetch_news.py
 
       - name: Create YouTube Short
         run: python scripts/make_short.py
 
-      - name: Upload Short to YouTube
-        run: python scripts/upload_youtube.py short
+      - name: Upload Short to YouTube (if exists)
+        run: |
+          if ls shorts/*.mp4 1> /dev/null 2>&1; then
+            python scripts/upload_youtube.py short
+          else
+            echo "No short video generated"
+          fi
 
       - name: Create Long Video
         run: python scripts/make_long.py
 
-      - name: Restore YouTube token
+      - name: Upload Long Video to YouTube (if exists)
         run: |
-          mkdir -p config
-          echo '${{ secrets.YT_TOKEN_JSON }}' > config/token.json
+          if ls long/*.mp4 1> /dev/null 2>&1; then
+            python scripts/upload_youtube.py long
+          else
+            echo "No long video generated"
+          fi
 
-
-      - name: Upload Long Video to YouTube
-        run: python scripts/upload_youtube.py long
-
-      - name: Commit generated videos
+      - name: Commit generated files
         run: |
-          git config --global user.name "yt-bot"
+          git config --global user.name "yt-automation-bot"
           git config --global user.email "bot@github.com"
-          git add shorts long data
-          git commit -m "Daily YouTube automation" || echo "Nothing to commit"
+          git add data shorts long
+          git commit -m "Daily YouTube automation run" || echo "Nothing to commit"
           git push

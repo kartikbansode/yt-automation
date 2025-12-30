@@ -1,10 +1,18 @@
 from moviepy.editor import TextClip, CompositeVideoClip, ColorClip
-import json, uuid, os
+import json, uuid, os, sys
 
 os.makedirs("shorts", exist_ok=True)
 
+if not os.path.exists("data/news.json"):
+    print("❌ news.json not found")
+    sys.exit(0)
+
 with open("data/news.json") as f:
     news = json.load(f)
+
+if not news:
+    print("⚠️ news.json is empty")
+    sys.exit(0)
 
 item = news[0]
 
@@ -31,4 +39,4 @@ final.write_videofile(
     audio=False
 )
 
-print("Created short:", filename)
+print("✅ Created short:", filename)
