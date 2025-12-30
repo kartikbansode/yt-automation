@@ -2,7 +2,7 @@ name: Daily YouTube Automation
 
 on:
   schedule:
-    - cron: "0 6 * * *"   # Daily at 06:00 UTC
+    - cron: "0 6 * * *"   # Runs daily at 06:00 UTC
   workflow_dispatch:
 
 jobs:
@@ -10,42 +10,62 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # -------------------------
+      # Checkout
+      # -------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # -------------------------
+      # Python setup
+      # -------------------------
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
 
+      # -------------------------
+      # System dependencies
+      # -------------------------
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg imagemagick
+          sudo apt-get install -y ffmpeg
 
-      - name: Fix ImageMagick security policy
-        run: |
-          sudo sed -i 's/<policy domain="path" rights="none" pattern="@\*"/>/<policy domain="path" rights="read|write" pattern="@*"/>/' /etc/ImageMagick-6/policy.xml || true
-
+      # -------------------------
+      # Python dependencies
+      # -------------------------
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
 
+      # -------------------------
+      # Restore YouTube OAuth token
+      # -------------------------
       - name: Restore YouTube OAuth token
         run: |
           mkdir -p config
           echo '${{ secrets.YT_TOKEN_JSON }}' > config/token.json
 
+      # -------------------------
+      # Fetch news
+      # -------------------------
       - name: Fetch news
         env:
           NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
         run: python scripts/fetch_news.py
 
+      # -------------------------
+      # Create Short
+      # -------------------------
       - name: Create YouTube Short
         run: python scripts/make_short.py
 
-      - name: Upload Short to YouTube (if exists)
+      # -------------------------
+      # Upload Short (only if exists)
+      # -------------------------
+      - name: Upload Short to YouTube
         run: |
           if ls shorts/*.mp4 1> /dev/null 2>&1; then
             python scripts/upload_youtube.py short
@@ -53,10 +73,16 @@ jobs:
             echo "No short video generated"
           fi
 
+      # -------------------------
+      # Create Long Video
+      # -------------------------
       - name: Create Long Video
         run: python scripts/make_long.py
 
-      - name: Upload Long Video to YouTube (if exists)
+      # -------------------------
+      # Upload Long (only if exists)
+      # -------------------------
+      - name: Upload Long Video to YouTube
         run: |
           if ls long/*.mp4 1> /dev/null 2>&1; then
             python scripts/upload_youtube.py long
@@ -64,6 +90,9 @@ jobs:
             echo "No long video generated"
           fi
 
+      # -------------------------
+      # Commit generated files
+      # -------------------------
       - name: Commit generated files
         run: |
           git config --global user.name "yt-automation-bot"
