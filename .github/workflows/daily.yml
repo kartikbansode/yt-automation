@@ -1,0 +1,46 @@
+name: Daily YouTube Automation
+
+on:
+  schedule:
+    - cron: "0 6 * * *"   # once per day (UTC)
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Fetch news
+        run: python scripts/fetch_news.py
+
+      - name: Create YouTube Short
+        run: python scripts/make_short.py
+
+      - name: Upload Short to YouTube
+        run: python scripts/upload_youtube.py short
+
+      - name: Create Long Video
+        run: python scripts/make_long.py
+
+      - name: Upload Long Video to YouTube
+        run: python scripts/upload_youtube.py long
+
+      - name: Commit generated videos
+        run: |
+          git config --global user.name "yt-bot"
+          git config --global user.email "bot@github.com"
+          git add shorts long data
+          git commit -m "Daily YouTube automation" || echo "Nothing to commit"
+          git push
