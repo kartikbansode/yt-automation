@@ -1,75 +1,66 @@
 import os, json, uuid, sys, requests
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
-from moviepy.editor import ImageClip, CompositeVideoClip
+from PIL import Image, ImageDraw, ImageFont
+from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip, AudioFileClip
+from scripts.broll import fetch_broll
 
-# ---------------- CONFIG ----------------
-WIDTH, HEIGHT = 1080, 1920
-DURATION = 30
-
+# ---------- CONFIG ----------
+W, H = 1080, 1920
+DURATION = 32
 BG_COLOR = "#f6f4f0"
-TEXT_COLOR = "#222222"
-OVERLAY_ALPHA = 160
+TXT_COLOR = "#222222"
 
 FONT_PATH = "assets/fonts/TheSeasons.ttf"
-TITLE_SIZE = 88
-DESC_SIZE = 46
+TITLE_SIZE = 84
+DESC_SIZE = 44
 
-# ---------------- SETUP ----------------
+# ---------- SETUP ----------
 os.makedirs("shorts", exist_ok=True)
-os.makedirs("assets/images", exist_ok=True)
+os.makedirs("/tmp/media", exist_ok=True)
 
 with open("data/news.json") as f:
     news = json.load(f)
 
 if not news:
-    print("No news available")
     sys.exit(0)
 
 item = news[0]
 title = item["title"]
-desc = (item.get("description") or "")[:160]
-img_url = item.get("image")
+desc = (item.get("description") or "")[:140]
 
-# ---------------- FONT ----------------
-def load_font(size):
+# ---------- FONT ----------
+def font(size):
     try:
         return ImageFont.truetype(FONT_PATH, size)
     except:
         return ImageFont.load_default()
 
-title_font = load_font(TITLE_SIZE)
-desc_font = load_font(DESC_SIZE)
+# ---------- VIDEO ----------
+query = " ".join(title.split()[:3])
+video_url = fetch_broll(query)
 
-# ---------------- IMAGE ----------------
-bg = Image.new("RGB", (WIDTH, HEIGHT), BG_COLOR)
+if not video_url:
+    print("No b-roll found")
+    sys.exit(0)
 
-if img_url:
-    try:
-        r = requests.get(img_url, timeout=10)
-        img_path = f"assets/images/{uuid.uuid4()}.jpg"
-        with open(img_path, "wb") as f:
-            f.write(r.content)
+video_path = f"/tmp/media/{uuid.uuid4()}.mp4"
+open(video_path, "wb").write(requests.get(video_url).content)
 
-        img = Image.open(img_path).convert("RGB")
-        img = img.resize((WIDTH, HEIGHT))
-        img = img.filter(ImageFilter.GaussianBlur(12))
-        bg.paste(img, (0, 0))
-    except:
-        pass
+bg_video = (
+    VideoFileClip(video_path)
+    .resize(height=H)
+    .crop(x_center=W//2, y_center=H//2, width=W, height=H)
+    .subclip(0, DURATION)
+)
 
-# Overlay
-overlay = Image.new("RGBA", (WIDTH, HEIGHT), (246, 244, 240, OVERLAY_ALPHA))
-bg = Image.alpha_composite(bg.convert("RGBA"), overlay)
+# ---------- TEXT IMAGE ----------
+img = Image.new("RGB", (W, H), BG_COLOR)
+draw = ImageDraw.Draw(img)
 
-draw = ImageDraw.Draw(bg)
-
-# ---------------- TEXT WRAP ----------------
-def wrap(draw, text, font, max_width):
-    words = text.split()
-    lines, line = [], ""
+def wrap(text, f, maxw):
+    words, lines, line = text.split(), [], ""
     for w in words:
         test = f"{line}{w} "
-        if draw.textbbox((0,0), test, font=font)[2] <= max_width:
+        if draw.textbbox((0,0), test, font=f)[2] <= maxw:
             line = test
         else:
             lines.append(line)
@@ -77,25 +68,33 @@ def wrap(draw, text, font, max_width):
     lines.append(line)
     return lines
 
-y = 280
-for line in wrap(draw, title, title_font, WIDTH - 160):
-    draw.text((80, y), line, font=title_font, fill=TEXT_COLOR)
-    y += TITLE_SIZE + 8
+y = 260
+for l in wrap(title, font(TITLE_SIZE), W-160):
+    draw.text((80, y), l, fill=TXT_COLOR, font=font(TITLE_SIZE))
+    y += TITLE_SIZE + 6
 
-y += 40
-for line in wrap(draw, desc, desc_font, WIDTH - 160):
-    draw.text((80, y), line, font=desc_font, fill=TEXT_COLOR)
-    y += DESC_SIZE + 6
+y += 30
+for l in wrap(desc, font(DESC_SIZE), W-160):
+    draw.text((80, y), l, fill=TXT_COLOR, font=font(DESC_SIZE))
+    y += DESC_SIZE + 4
 
-# ---------------- EXPORT ----------------
-img_path = f"/tmp/{uuid.uuid4()}.png"
-bg.convert("RGB").save(img_path)
+img_path = f"/tmp/media/{uuid.uuid4()}.png"
+img.save(img_path)
 
-video = CompositeVideoClip([
-    ImageClip(img_path).set_duration(DURATION)
-])
+text_clip = ImageClip(img_path).set_duration(DURATION)
+
+# ---------- MUSIC ----------
+music_path = "assets/music/news_theme.mp3"
+if os.path.exists(music_path):
+    audio = AudioFileClip(music_path).volumex(0.25).set_duration(DURATION)
+else:
+    audio = None
+
+final = CompositeVideoClip([bg_video, text_clip])
+if audio:
+    final.audio = audio
 
 out = f"shorts/{uuid.uuid4()}.mp4"
-video.write_videofile(out, fps=24, codec="libx264", audio=False, logger=None)
+final.write_videofile(out, fps=24, codec="libx264", audio=True, logger=None)
 
-print("✅ PRO Short created:", out)
+print("✅ PROFESSIONAL SHORT CREATED:", out)
