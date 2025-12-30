@@ -1,109 +1,101 @@
-import os
-import json
-import uuid
-import sys
+import os, json, uuid, sys, requests
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from moviepy.editor import ImageClip, CompositeVideoClip
 
-from PIL import Image, ImageDraw, ImageFont
-from moviepy.editor import ImageClip, CompositeVideoClip, ColorClip
-
-# ------------------------
-# Constants
-# ------------------------
+# ---------------- CONFIG ----------------
 WIDTH, HEIGHT = 1080, 1920
 DURATION = 30
-MARGIN_X = 80
-START_Y = 300
-LINE_SPACING = 12
 
-# ------------------------
-# Setup
-# ------------------------
+BG_COLOR = "#f6f4f0"
+TEXT_COLOR = "#222222"
+OVERLAY_ALPHA = 160
+
+FONT_PATH = "assets/fonts/TheSeasons.ttf"
+TITLE_SIZE = 88
+DESC_SIZE = 46
+
+# ---------------- SETUP ----------------
 os.makedirs("shorts", exist_ok=True)
+os.makedirs("assets/images", exist_ok=True)
 
-if not os.path.exists("data/news.json"):
-    print("❌ data/news.json not found")
-    sys.exit(0)
-
-with open("data/news.json", "r") as f:
+with open("data/news.json") as f:
     news = json.load(f)
 
 if not news:
-    print("⚠️ news.json is empty")
+    print("No news available")
     sys.exit(0)
 
 item = news[0]
+title = item["title"]
+desc = (item.get("description") or "")[:160]
+img_url = item.get("image")
 
-title = item.get("title", "").strip()
-desc = (item.get("description") or "").strip()[:140]
+# ---------------- FONT ----------------
+def load_font(size):
+    try:
+        return ImageFont.truetype(FONT_PATH, size)
+    except:
+        return ImageFont.load_default()
 
-text_blocks = [title, "", desc]
+title_font = load_font(TITLE_SIZE)
+desc_font = load_font(DESC_SIZE)
 
-# ------------------------
-# Create image
-# ------------------------
-img = Image.new("RGB", (WIDTH, HEIGHT), color=(0, 0, 0))
-draw = ImageDraw.Draw(img)
-font = ImageFont.load_default()
+# ---------------- IMAGE ----------------
+bg = Image.new("RGB", (WIDTH, HEIGHT), BG_COLOR)
 
-MAX_WIDTH = WIDTH - (MARGIN_X * 2)
+if img_url:
+    try:
+        r = requests.get(img_url, timeout=10)
+        img_path = f"assets/images/{uuid.uuid4()}.jpg"
+        with open(img_path, "wb") as f:
+            f.write(r.content)
 
-def text_width(draw, text, font):
-    """Return width of single-line text using Pillow >=10"""
-    bbox = draw.textbbox((0, 0), text, font=font)
-    return bbox[2] - bbox[0]
+        img = Image.open(img_path).convert("RGB")
+        img = img.resize((WIDTH, HEIGHT))
+        img = img.filter(ImageFilter.GaussianBlur(12))
+        bg.paste(img, (0, 0))
+    except:
+        pass
 
-def wrap_line(draw, text, font, max_width):
-    words = text.split(" ")
-    lines = []
-    current = ""
+# Overlay
+overlay = Image.new("RGBA", (WIDTH, HEIGHT), (246, 244, 240, OVERLAY_ALPHA))
+bg = Image.alpha_composite(bg.convert("RGBA"), overlay)
 
-    for word in words:
-        test = f"{current}{word} "
-        if text_width(draw, test, font) <= max_width:
-            current = test
+draw = ImageDraw.Draw(bg)
+
+# ---------------- TEXT WRAP ----------------
+def wrap(draw, text, font, max_width):
+    words = text.split()
+    lines, line = [], ""
+    for w in words:
+        test = f"{line}{w} "
+        if draw.textbbox((0,0), test, font=font)[2] <= max_width:
+            line = test
         else:
-            lines.append(current.rstrip())
-            current = f"{word} "
-    if current:
-        lines.append(current.rstrip())
-
+            lines.append(line)
+            line = f"{w} "
+    lines.append(line)
     return lines
 
-y = START_Y
+y = 280
+for line in wrap(draw, title, title_font, WIDTH - 160):
+    draw.text((80, y), line, font=title_font, fill=TEXT_COLOR)
+    y += TITLE_SIZE + 8
 
-for block in text_blocks:
-    if not block:
-        y += font.size * 2
-        continue
+y += 40
+for line in wrap(draw, desc, desc_font, WIDTH - 160):
+    draw.text((80, y), line, font=desc_font, fill=TEXT_COLOR)
+    y += DESC_SIZE + 6
 
-    lines = wrap_line(draw, block, font, MAX_WIDTH)
-    for line in lines:
-        draw.text((MARGIN_X, y), line, fill="white", font=font)
-        y += font.size + LINE_SPACING
-
-# ------------------------
-# Save image
-# ------------------------
+# ---------------- EXPORT ----------------
 img_path = f"/tmp/{uuid.uuid4()}.png"
-img.save(img_path)
+bg.convert("RGB").save(img_path)
 
-# ------------------------
-# Build video
-# ------------------------
-bg = ColorClip((WIDTH, HEIGHT), color=(0, 0, 0), duration=DURATION)
-txt_clip = ImageClip(img_path).set_duration(DURATION)
+video = CompositeVideoClip([
+    ImageClip(img_path).set_duration(DURATION)
+])
 
-final = CompositeVideoClip([bg, txt_clip])
+out = f"shorts/{uuid.uuid4()}.mp4"
+video.write_videofile(out, fps=24, codec="libx264", audio=False, logger=None)
 
-out_file = f"shorts/{uuid.uuid4()}.mp4"
-
-final.write_videofile(
-    out_file,
-    fps=24,
-    codec="libx264",
-    audio=False,
-    verbose=False,
-    logger=None
-)
-
-print("✅ Short created:", out_file)
+print("✅ PRO Short created:", out)
