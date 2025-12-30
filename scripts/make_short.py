@@ -1,7 +1,8 @@
 import os, json, uuid, sys, requests
 from PIL import Image, ImageDraw, ImageFont
 from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip, AudioFileClip
-from scripts.broll import fetch_broll
+from broll import fetch_broll
+
 
 # ---------- CONFIG ----------
 W, H = 1080, 1920

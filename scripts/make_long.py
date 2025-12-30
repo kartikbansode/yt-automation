@@ -1,7 +1,8 @@
 import os, json, uuid, sys, requests
 from PIL import Image, ImageDraw, ImageFont
 from moviepy.editor import VideoFileClip, ImageClip, concatenate_videoclips, AudioFileClip
-from scripts.broll import fetch_broll
+from broll import fetch_broll
+
 
 W, H = 1280, 720
 SEGMENT = 50
