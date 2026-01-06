@@ -3,11 +3,6 @@ name: Daily YouTube Automation
 permissions:
   contents: write   # 👈 THIS IS THE KEY FIX
 
-on:
-  schedule:
-    - cron: "0 6 * * *"
-  workflow_dispatch:
-
 jobs:
   yt-automation:
     runs-on: ubuntu-latest
